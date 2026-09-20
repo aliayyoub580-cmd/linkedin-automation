@@ -86,10 +86,15 @@ Publishes post content to LinkedIn via Publora.
 - **Request Body:**
   ```json
   {
-    "content": "Excited to share our latest project update!"
+    "title": "Optional Headline or Title",
+    "content": "Excited to share our latest project update!",
+    "imageUrl": "https://example.com/image.jpg"
   }
   ```
 - **Optional Request Body Fields:**
+  - `title`: A string title or headline that will be prefixed above the content.
+  - `imageUrl`: A direct public HTTPS image URL to attach to the LinkedIn post.
+  - `mediaUrls`: An array of public HTTPS image/media URLs (up to 10).
   - `scheduledTime`: An ISO 8601 UTC timestamp (e.g. `"2026-03-25T15:00:00.000Z"`). If omitted, the post is automatically scheduled with a 60-second buffer for immediate publication.
 
 #### Example `curl` Command:
@@ -99,7 +104,9 @@ curl -X POST http://localhost:3000/api/publish \
   -H "Authorization: Bearer YOUR_BRIDGE_SECRET" \
   -H "Content-Type: application/json" \
   -d '{
-    "content": "Hello LinkedIn from my automated publishing bridge!"
+    "title": "🚀 The Future of AI & Automation",
+    "content": "Exploring modern automated publishing workflows with Next.js and Publora.",
+    "imageUrl": "https://images.unsplash.com/photo-1518770660439-4636190af475?w=1200&auto=format&fit=crop&q=80"
   }'
 ```
 

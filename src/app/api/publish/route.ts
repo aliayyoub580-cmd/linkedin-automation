@@ -80,7 +80,19 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const postContent = body.content.trim();
+  const rawContent = body.content.trim();
+  const title = typeof body.title === "string" ? body.title.trim() : "";
+  const postContent = title ? `${title}\n\n${rawContent}` : rawContent;
+
+  // Extract optional media URLs
+  let mediaUrls: string[] | undefined;
+  if (Array.isArray(body.mediaUrls)) {
+    mediaUrls = body.mediaUrls.filter(
+      (url): url is string => typeof url === "string" && url.startsWith("http")
+    );
+  } else if (typeof body.imageUrl === "string" && body.imageUrl.startsWith("http")) {
+    mediaUrls = [body.imageUrl.trim()];
+  }
 
   // 4. Determine scheduled time: use provided valid ISO timestamp or current time + 60s buffer
   let scheduledTime: string;
@@ -95,11 +107,15 @@ export async function POST(req: NextRequest) {
   }
 
   // 5. Send post payload to Publora API
-  const publoraPayload = {
+  const publoraPayload: Record<string, unknown> = {
     content: postContent,
     platforms: [linkedinPlatformId],
     scheduledTime,
   };
+
+  if (mediaUrls && mediaUrls.length > 0) {
+    publoraPayload.mediaUrls = mediaUrls;
+  }
 
   try {
     const publoraResponse = await fetch(PUBLORA_CREATE_POST_ENDPOINT, {
