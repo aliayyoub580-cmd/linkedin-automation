@@ -49,6 +49,8 @@ export default function Home() {
   const [showPasswordModal, setShowPasswordModal] = useState<boolean>(false);
   const [passwordInput, setPasswordInput] = useState<string>("");
   const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [modalMode, setModalMode] = useState<"schedule" | "publish_now">("schedule");
+  const [isPublishingNow, setIsPublishingNow] = useState<boolean>(false);
 
   const [toast, setToast] = useState<string | null>(null);
   const [healthStatus, setHealthStatus] = useState<string | null>(null);
@@ -164,22 +166,62 @@ export default function Home() {
   const handleRequestTimeChange = (newTime: string) => {
     if (newTime === postingTime) return;
     setPendingTime(newTime);
+    setModalMode("schedule");
     setPasswordInput("");
     setPasswordError(null);
     setShowPasswordModal(true);
   };
 
-  const handleVerifyPassword = (e: React.FormEvent) => {
+  const handleRequestPublishNow = () => {
+    setModalMode("publish_now");
+    setPasswordInput("");
+    setPasswordError(null);
+    setShowPasswordModal(true);
+  };
+
+  const handleVerifyPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (passwordInput === REQUIRED_SCHEDULE_PASSWORD) {
+    if (passwordInput !== REQUIRED_SCHEDULE_PASSWORD) {
+      setPasswordError("Incorrect password. Access denied.");
+      return;
+    }
+
+    if (modalMode === "schedule") {
       setPostingTime(pendingTime);
       localStorage.setItem("linkedin_posting_time", pendingTime);
       setShowPasswordModal(false);
       setPasswordInput("");
       setPasswordError(null);
       showToast(`✓ Password verified! Daily posting time updated to ${pendingTime} PKT.`);
-    } else {
-      setPasswordError("Incorrect password. Access denied.");
+    } else if (modalMode === "publish_now") {
+      setShowPasswordModal(false);
+      setPasswordInput("");
+      setPasswordError(null);
+      setIsPublishingNow(true);
+      showToast("⏳ Generating & publishing today's LinkedIn post...");
+
+      try {
+        const res = await fetch("/api/cron/daily?force=true", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${REQUIRED_SCHEDULE_PASSWORD}`,
+          },
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          showToast("✓ Success! Today's LinkedIn post has been scheduled & published!");
+          setTimeout(() => {
+            fetchLatestPost();
+          }, 2000);
+        } else {
+          showToast(`⚠ Publishing error: ${data.error || "Failed to publish"}`);
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : "Network error";
+        showToast(`⚠ Network error: ${msg}`);
+      } finally {
+        setIsPublishingNow(false);
+      }
     }
   };
 
@@ -214,7 +256,15 @@ export default function Home() {
             <div className={styles.modalHeader}>
               <h3 className={styles.modalTitle}>🔒 Password Required</h3>
               <p className={styles.modalSub}>
-                Enter the administrator password to change the daily posting schedule time to <strong>{pendingTime} PKT</strong>.
+                {modalMode === "schedule" ? (
+                  <>
+                    Enter the administrator password to change the daily posting schedule time to <strong>{pendingTime} PKT</strong>.
+                  </>
+                ) : (
+                  <>
+                    Enter the administrator password to generate and publish today&apos;s LinkedIn post immediately.
+                  </>
+                )}
               </p>
             </div>
 
@@ -238,8 +288,8 @@ export default function Home() {
               )}
 
               <div className={styles.modalActions}>
-                <button type="submit" className={styles.confirmBtn}>
-                  Unlock & Update
+                <button type="submit" className={styles.confirmBtn} disabled={isPublishingNow}>
+                  {modalMode === "schedule" ? "Unlock & Update" : "Publish Now"}
                 </button>
                 <button
                   type="button"
@@ -449,6 +499,15 @@ export default function Home() {
             className={styles.saveBtn}
           >
             <span>🔒 Save Schedule Preference (Requires Password)</span>
+          </button>
+
+          {/* Immediate Publish Button */}
+          <button
+            onClick={handleRequestPublishNow}
+            disabled={isPublishingNow}
+            className={styles.publishNowBtn}
+          >
+            <span>{isPublishingNow ? "⏳ Publishing Post to LinkedIn..." : "🚀 Publish Today's Post Now"}</span>
           </button>
         </div>
 
