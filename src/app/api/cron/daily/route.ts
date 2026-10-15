@@ -290,38 +290,40 @@ Writing Guidelines:
 
     // 6. Attempt dynamic generation with Google Gemini first (if configured)
     if (geminiApiKey) {
-      try {
-        const geminiRes = await fetch(
-          `${GEMINI_API_BASE}/models/gemini-3.8-flash:generateContent`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-goog-api-key": geminiApiKey,
-            },
-            body: JSON.stringify({
-              contents: [
-                {
-                  parts: [{ text: promptText }],
-                },
-              ],
-            }),
-          }
-        );
+      const candidateModels = ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-3-flash-preview"];
+      for (const model of candidateModels) {
+        try {
+          const geminiRes = await fetch(
+            `${GEMINI_API_BASE}/models/${model}:generateContent`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "X-goog-api-key": geminiApiKey,
+              },
+              body: JSON.stringify({
+                contents: [
+                  {
+                    parts: [{ text: promptText }],
+                  },
+                ],
+              }),
+            }
+          );
 
-        if (geminiRes.ok) {
-          const geminiData = await geminiRes.json();
-          const generatedText: string =
-            geminiData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
-          if (generatedText) {
-            finalPostContent = `${generatedText}\n\n📌 Ref: ${executionId}`;
-            source = "google_gemini_3.8_flash";
+          if (geminiRes.ok) {
+            const geminiData = await geminiRes.json();
+            const generatedText: string =
+              geminiData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
+            if (generatedText) {
+              finalPostContent = `${generatedText}\n\n📌 Ref: ${executionId}`;
+              source = `google_${model}`;
+              break;
+            }
           }
-        } else {
-          console.warn("Gemini generation HTTP status:", geminiRes.status);
+        } catch (geminiErr) {
+          console.warn(`Google Gemini ${model} error:`, geminiErr);
         }
-      } catch (geminiErr) {
-        console.warn("Google Gemini generation error:", geminiErr);
       }
     }
 
