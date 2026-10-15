@@ -20,6 +20,56 @@ interface DayPostContent {
   imageUrl: string;
 }
 
+/**
+ * High-resolution, professional technology image pools per category.
+ * Dynamically picks unique relevant imagery for every post based on the date hash.
+ */
+const CATEGORY_IMAGE_POOLS: Record<string, string[]> = {
+  "Web Development": [
+    "https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=1200&auto=format&fit=crop&q=80",
+    "https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=1200&auto=format&fit=crop&q=80",
+    "https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=1200&auto=format&fit=crop&q=80",
+    "https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?w=1200&auto=format&fit=crop&q=80",
+    "https://images.unsplash.com/photo-1542838132-92c53300491e?w=1200&auto=format&fit=crop&q=80",
+  ],
+  Python: [
+    "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=1200&auto=format&fit=crop&q=80",
+    "https://images.unsplash.com/photo-1515879218367-8466d910aaa4?w=1200&auto=format&fit=crop&q=80",
+    "https://images.unsplash.com/photo-1555949963-ff9fe0c870eb?w=1200&auto=format&fit=crop&q=80",
+    "https://images.unsplash.com/photo-1504639725590-34d0984388bd?w=1200&auto=format&fit=crop&q=80",
+  ],
+  "Artificial Intelligence": [
+    "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1200&auto=format&fit=crop&q=80",
+    "https://images.unsplash.com/photo-1677442136019-21780ecad995?w=1200&auto=format&fit=crop&q=80",
+    "https://images.unsplash.com/photo-1620712943543-bcc4688e7485?w=1200&auto=format&fit=crop&q=80",
+    "https://images.unsplash.com/photo-1617791160505-6f00b51616ec?w=1200&auto=format&fit=crop&q=80",
+  ],
+  "Machine Learning": [
+    "https://images.unsplash.com/photo-1509228468518-180dd4864904?w=1200&auto=format&fit=crop&q=80",
+    "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=1200&auto=format&fit=crop&q=80",
+    "https://images.unsplash.com/photo-1518770660439-4636190af475?w=1200&auto=format&fit=crop&q=80",
+    "https://images.unsplash.com/photo-1527474305487-b87b222841cc?w=1200&auto=format&fit=crop&q=80",
+  ],
+  "Mobile Application Development": [
+    "https://images.unsplash.com/photo-1512941937669-90a1b58e7e9c?w=1200&auto=format&fit=crop&q=80",
+    "https://images.unsplash.com/photo-1526406915894-7bcd65f60845?w=1200&auto=format&fit=crop&q=80",
+    "https://images.unsplash.com/photo-1551650975-87deedd944c3?w=1200&auto=format&fit=crop&q=80",
+    "https://images.unsplash.com/photo-1563986768609-322da13575f3?w=1200&auto=format&fit=crop&q=80",
+  ],
+  "Software Engineering / Developer Tools": [
+    "https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=1200&auto=format&fit=crop&q=80",
+    "https://images.unsplash.com/photo-1607799279861-4dd421887fb3?w=1200&auto=format&fit=crop&q=80",
+    "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=1200&auto=format&fit=crop&q=80",
+    "https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=1200&auto=format&fit=crop&q=80",
+  ],
+  "Weekly Technology Insight": [
+    "https://images.unsplash.com/photo-1519389950473-47ba0277781c?w=1200&auto=format&fit=crop&q=80",
+    "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1200&auto=format&fit=crop&q=80",
+    "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=1200&auto=format&fit=crop&q=80",
+    "https://images.unsplash.com/photo-1497366216548-37526070297c?w=1200&auto=format&fit=crop&q=80",
+  ],
+};
+
 const CURATED_DAY_POSTS: Record<string, DayPostContent> = {
   Monday: {
     title: "⚡ Modern Web Architecture: Designing for Speed, Resilience & Scale",
@@ -387,13 +437,19 @@ Writing Guidelines:
       }
     }
 
-    // 8. Fallback to rich curated content if dynamic generation did not produce content or image
+    // 8. Select image: If DALL-E did not provide one, select a dynamic relevant image from the category pool
+    if (!finalImageUrl) {
+      const pool = CATEGORY_IMAGE_POOLS[category] || CATEGORY_IMAGE_POOLS["Weekly Technology Insight"];
+      // Use date string to pick a predictable yet rotating image for each day
+      const charSum = dateStr.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
+      const chosenIndex = charSum % pool.length;
+      finalImageUrl = pool[chosenIndex];
+    }
+
+    // Fallback content if AI did not generate
     const fallback = CURATED_DAY_POSTS[weekday] || CURATED_DAY_POSTS.Monday;
     if (!finalPostContent) {
       finalPostContent = `${fallback.title}\n\n${fallback.content}\n\n📌 Ref: ${executionId}`;
-    }
-    if (!finalImageUrl) {
-      finalImageUrl = fallback.imageUrl;
     }
 
     // 8. Publish post to Publora targeting LinkedIn
