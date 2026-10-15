@@ -7,6 +7,7 @@ export const maxDuration = 60;
 
 const PUBLORA_API_BASE = "https://api.publora.com/api/v1";
 const OPENAI_API_BASE = "https://api.openai.com/v1";
+const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
 const ADMIN_PASSWORD = "Atif.123";
 
 /**
@@ -199,6 +200,7 @@ async function handleCronExecution(req: NextRequest) {
   const publoraApiKey = process.env.PUBLORA_API_KEY?.trim();
   const linkedinPlatformId = process.env.LINKEDIN_PLATFORM_ID?.trim();
   const openaiApiKey = process.env.OPENAI_API_KEY?.trim();
+  const geminiApiKey = process.env.GEMINI_API_KEY?.trim();
 
   if (!publoraApiKey) {
     return NextResponse.json(
@@ -263,6 +265,7 @@ async function handleCronExecution(req: NextRequest) {
       date: dateStr,
       weekday,
       category,
+      hasGeminiKey: Boolean(geminiApiKey),
       hasOpenAiKey: Boolean(openaiApiKey),
     });
   }
@@ -272,19 +275,59 @@ async function handleCronExecution(req: NextRequest) {
     let finalImageUrl = "";
     let source = "curated_fallback";
 
-    // 6. Attempt dynamic generation with OpenAI if key is present
-    if (openaiApiKey) {
-      try {
-        const textPrompt = `You are a professional software engineer and content creator. Write an engaging, educational LinkedIn post about ${category}.
-Requirements:
-- Target length: 120–200 words.
-- Professional, human, educational, practical, and clear.
-- Strong opening hook.
-- Short, readable paragraphs (1–2 sentences each).
-- Actionable insight or useful conclusion.
-- 3–5 relevant hashtags at the end.
-- Strictly avoid: fake statistics, exaggerated claims, excessive emojis, generic AI phrasing ("In today's fast-paced world..."), or hard selling.`;
+    const promptText = `You are an elite, modern software engineer and thoughtful tech writer sharing an insight on LinkedIn for ${weekday}.
+Topic Category: ${category}
+Date Context: ${dateStr}
 
+Writing Guidelines:
+- Write a fresh, high-impact, authentic LinkedIn post (140 to 220 words).
+- Hook the reader in the very first sentence with a non-obvious engineering truth or thought-provoking observation.
+- Deliver 2 to 3 crisp, concrete bullet points or brief paragraphs with actionable engineering depth.
+- Conclude with an open-ended engagement question for practitioners.
+- End with 3-5 high-relevance hashtags.
+- Do NOT use generic AI clichés like "In today's fast-paced world", "Revolutionizing", "Let's dive in", or "Game-changer".
+- Make it sound natural, authoritative, and direct.`;
+
+    // 6. Attempt dynamic generation with Google Gemini first (if configured)
+    if (geminiApiKey) {
+      try {
+        const geminiRes = await fetch(
+          `${GEMINI_API_BASE}/models/gemini-3.8-flash:generateContent`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-goog-api-key": geminiApiKey,
+            },
+            body: JSON.stringify({
+              contents: [
+                {
+                  parts: [{ text: promptText }],
+                },
+              ],
+            }),
+          }
+        );
+
+        if (geminiRes.ok) {
+          const geminiData = await geminiRes.json();
+          const generatedText: string =
+            geminiData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
+          if (generatedText) {
+            finalPostContent = `${generatedText}\n\n📌 Ref: ${executionId}`;
+            source = "google_gemini_3.8_flash";
+          }
+        } else {
+          console.warn("Gemini generation HTTP status:", geminiRes.status);
+        }
+      } catch (geminiErr) {
+        console.warn("Google Gemini generation error:", geminiErr);
+      }
+    }
+
+    // 7. Attempt dynamic generation with OpenAI if Gemini was absent or failed
+    if (!finalPostContent && openaiApiKey) {
+      try {
         const chatRes = await fetch(`${OPENAI_API_BASE}/chat/completions`, {
           method: "POST",
           headers: {
@@ -295,7 +338,7 @@ Requirements:
             model: "gpt-4o-mini",
             messages: [
               { role: "system", content: "You write insightful, human, high-impact LinkedIn engineering posts." },
-              { role: "user", content: textPrompt },
+              { role: "user", content: promptText },
             ],
             temperature: 0.7,
           }),
@@ -309,8 +352,14 @@ Requirements:
             source = "openai_gpt4o_mini";
           }
         }
+      } catch (openAiErr) {
+        console.warn("OpenAI generation encountered an issue:", openAiErr);
+      }
+    }
 
-        // Try generating image via DALL-E 3
+    // Attempt OpenAI DALL-E 3 image generation if OpenAI is configured
+    if (openaiApiKey) {
+      try {
         const imagePrompt = `A premium, modern, technology-focused visual concept representing ${category}. Clean, LinkedIn professional aesthetic, high quality, strong visual hierarchy, minimal text, no watermark, no logos, modern tech workspace or abstract digital architecture.`;
         const imageRes = await fetch(`${OPENAI_API_BASE}/images/generations`, {
           method: "POST",
@@ -331,20 +380,18 @@ Requirements:
           const imageData = await imageRes.json();
           finalImageUrl = imageData.data?.[0]?.url || "";
         }
-      } catch (openAiErr) {
-        console.warn("OpenAI generation encountered an issue, falling back to curated content:", openAiErr);
+      } catch (openAiImgErr) {
+        console.warn("OpenAI image generation error:", openAiImgErr);
       }
     }
 
-    // 7. Fallback to rich curated content if OpenAI was not configured or generation failed
-    if (!finalPostContent || !finalImageUrl) {
-      const fallback = CURATED_DAY_POSTS[weekday] || CURATED_DAY_POSTS.Monday;
-      if (!finalPostContent) {
-        finalPostContent = `${fallback.title}\n\n${fallback.content}\n\n📌 Ref: ${executionId}`;
-      }
-      if (!finalImageUrl) {
-        finalImageUrl = fallback.imageUrl;
-      }
+    // 8. Fallback to rich curated content if dynamic generation did not produce content or image
+    const fallback = CURATED_DAY_POSTS[weekday] || CURATED_DAY_POSTS.Monday;
+    if (!finalPostContent) {
+      finalPostContent = `${fallback.title}\n\n${fallback.content}\n\n📌 Ref: ${executionId}`;
+    }
+    if (!finalImageUrl) {
+      finalImageUrl = fallback.imageUrl;
     }
 
     // 8. Publish post to Publora targeting LinkedIn
